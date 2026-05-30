@@ -1,39 +1,34 @@
-# 🚪 Mom Detector
-> Door opens → PC instantly switches to a random educational site. Built with ESP32 + Python.
+# 🚪 Mom Detector (Battery-Powered Edition)
+
+> Door opens → PC instantly switches to a random educational site. Built with ESP32 + Python + Deep Sleep.
 
 ---
 
 ## 🛒 Parts List
 
-| Part | Where to Buy | Cost |
-|------|-------------|------|
-| ESP32 Dev Board (WROOM-32) | Amazon / AliExpress | ~$8 |
-| Reed Switch + Magnet (NO type) | Amazon (pack of 10) | ~$3 |
-| Jumper wires (Male-Male) | Amazon | ~$3 |
-| Micro USB cable | You have one | — |
+| Part                               | Where to Buy              | Cost   |
+| ---------------------------------- | ------------------------- | ------ |
+| ESP32 Dev Board (WROOM-32)         | Amazon / AliExpress       | ~$8    |
+| Reed Switch (NO type)              | Amazon                    | ~$5    |
+| Magnet                             | Included with reed switch | —      |
+| AMS1117-3.3V Regulator             | Amazon                    | ~$0.50 |
+| 2× 100µF electrolytic capacitors   | Amazon                    | ~$0.50 |
+| 2× 2xAA battery packs (or 1× 4xAA) | You have these            | —      |
+| Jumper wires                       | Amazon                    | ~$2    |
 
-**Total: ~$14**
+**Total: ~$16**
 
 ---
 
 ## ⚡ Wiring
 
-Reed switches have no polarity — just connect both wires anywhere.
+See `WIRING_DIAGRAM.svg` or the diagram in the documentation.
 
-```
-ESP32 Pin 14  ──── [Reed Switch] ──── ESP32 GND
-```
+**Quick summary:**
 
-**Mounting:**
-- Stick the **magnet** on the moving door
-- Stick the **reed switch** on the door **frame**, aligned with the magnet
-- Use double-sided tape or hot glue
-
-```
-CLOSED (safe):          OPEN (trigger!):
-Frame    Door           Frame         Door
-[Switch][Mag]    →      [Switch]  |  [Mag]
-```
+- Battery pack(s) in series → AMS1117 regulator → ESP32 VIN
+- Reed switch between GPIO 14 and GND
+- Deep sleep mode uses ~10 µA standby (6-12 months on batteries)
 
 ---
 
@@ -54,71 +49,63 @@ Frame    Door           Frame         Door
 ### Step 2 — Find Your PC's Local IP
 
 Open **Command Prompt** and run:
+
 ```
 ipconfig
 ```
+
 Look for **IPv4 Address** under your Wi-Fi adapter. It'll look like `192.168.1.42`. Save this for the next step.
 
 > ⚠️ Your ESP32 and PC must be on the **same Wi-Fi network**.
 
 ---
 
-### Step 3 — Flash the ESP32
+### Step 3 — Configure Credentials (IMPORTANT!)
 
-Create a new sketch in Arduino IDE and paste this code:
+⚠️ **Do NOT hardcode WiFi passwords in the sketch** — use a separate `credentials.h` file instead. This keeps your password out of GitHub.
+
+**Setup:**
+
+1. Download or clone this repo
+2. In the same folder as `esp32-mom-detector-battery.ino`, create a new file called `credentials.h`
+3. Copy this template into it:
 
 ```cpp
-#include <WiFi.h>
-#include <HTTPClient.h>
+// credentials.h - EXCLUDED FROM GIT
+// Fill in YOUR values below
 
-const char* ssid     = "YOUR_WIFI_NAME";
-const char* password = "YOUR_WIFI_PASSWORD";
-const char* pcIP     = "YOUR_PC_IP_HERE";   // e.g. "192.168.1.42"
-const int   pcPort   = 5555;
+#ifndef CREDENTIALS_H
+#define CREDENTIALS_H
 
-const int DOOR_PIN = 14;
-bool lastState = HIGH;
-unsigned long lastTrigger = 0;
+const char* SSID = "YOUR_WIFI_NAME";
+const char* PASSWORD = "YOUR_WIFI_PASSWORD";
+const char* PC_IP = "192.168.1.42";       // Replace with your PC's IPv4 from Step 2
+const int PC_PORT = 5555;
 
-void setup() {
-  Serial.begin(115200);
-  pinMode(DOOR_PIN, INPUT_PULLUP);
-  WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("\nWiFi connected!");
-}
-
-void loop() {
-  bool currentState = digitalRead(DOOR_PIN);
-
-  // Door opened = magnet pulled away = pin goes HIGH
-  if (currentState == HIGH && lastState == LOW && millis() - lastTrigger > 3000) {
-    lastTrigger = millis();
-    Serial.println("Door opened! Alerting PC...");
-
-    HTTPClient http;
-    String url = "http://" + String(pcIP) + ":" + String(pcPort) + "/trigger";
-    http.begin(url);
-    int code = http.GET();
-    Serial.println("Response code: " + String(code));
-    http.end();
-  }
-
-  lastState = currentState;
-  delay(50);
-}
+#endif
 ```
 
 **Fill in:**
-- `YOUR_WIFI_NAME` — your Wi-Fi SSID
+
+- `YOUR_WIFI_NAME` — your Wi-Fi network name (e.g., `"HomeNetwork"`)
 - `YOUR_WIFI_PASSWORD` — your Wi-Fi password
-- `YOUR_PC_IP_HERE` — the IP you found in Step 2
+- `192.168.1.42` — the IPv4 address you found in Step 2
+- `5555` — leave this alone unless you changed it in `mom_detector.py`
+
+**Why this approach?**
+
+- The `.gitignore` automatically excludes `credentials.h`, so your password never gets pushed to GitHub
+- If you clone this repo again on another device, you just create a new `credentials.h` with that device's info
+- The sketch includes `credentials.h` and uses the variables from it
+
+---
+
+### Step 4 — Flash the ESP32
+
+The sketch is in `esp32-mom-detector-battery.ino`. After creating `credentials.h`:
 
 **Upload:**
+
 1. Plug ESP32 into PC via USB
 2. `Tools > Board` → select **ESP32 Dev Module**
 3. `Tools > Port` → select the COM port that appeared
@@ -126,21 +113,24 @@ void loop() {
 5. If stuck at `Connecting....` → hold the **BOOT** button on the ESP32 until it starts uploading
 
 **Verify it works:**
-- Open `Tools > Serial Monitor`, set baud to **115200**
-- You should see `WiFi connected!`
 
-> **Reed switch reversed?** If the trigger fires when the door is *closed*, swap `HIGH` and `LOW` in the `if` condition.
+- Open `Tools > Serial Monitor`, set baud to **115200**
+- You should see `WiFi connected!` and `Going to deep sleep...`
+- Open your door → ESP32 wakes, connects, sends alert to PC
+- Random educational site opens on your PC
 
 ---
 
-### Step 4 — Python Server
+### Step 5 — Python Server (on your PC)
 
 **Install Flask (one time):**
+
 ```
 pip install flask
 ```
 
 **Create the file.** Save this as `mom_detector.py` somewhere permanent, like:
+
 ```
 C:\Users\YourName\Documents\mom_detector\mom_detector.py
 ```
@@ -194,16 +184,18 @@ if __name__ == '__main__':
 ```
 
 **Test it manually:**
+
 ```
 python "C:\Users\YourName\Documents\mom_detector\mom_detector.py"
 ```
+
 Then open `http://localhost:5555/trigger` in your browser — a random site should open.
 
 ---
 
-### Step 5 — Auto-Start on Boot
+### Step 6 — Auto-Start on Boot (Windows)
 
-Open **PowerShell as Administrator** (right-click Start → *Windows PowerShell (Admin)*).
+Open **PowerShell as Administrator** (right-click Start → _Windows PowerShell (Admin)_).
 
 Run this block, replacing the path with where you actually saved the file:
 
@@ -224,17 +216,21 @@ Write-Host "Done! Will auto-start on next login."
 ```
 
 **Start it right now without rebooting:**
+
 ```powershell
 Start-ScheduledTask -TaskName "MomDetector"
 ```
 
 **Confirm it's running:**
+
 ```
 netstat -an | findstr 5555
 ```
+
 You should see a line with `0.0.0.0:5555` — that means it's live.
 
 **Remove it later:**
+
 ```powershell
 Unregister-ScheduledTask -TaskName "MomDetector" -Confirm:$false
 ```
@@ -243,27 +239,52 @@ Unregister-ScheduledTask -TaskName "MomDetector" -Confirm:$false
 
 ## ✅ Final Checklist
 
+- [ ] `credentials.h` created with YOUR WiFi + PC IP filled in
 - [ ] ESP32 wired (Pin 14 + GND to reed switch)
-- [ ] Reed switch on door frame, magnet on door
+- [ ] Reed switch on door frame (NO type), magnet on door
 - [ ] Arduino IDE installed + ESP32 board package installed
-- [ ] Code flashed with your Wi-Fi + PC IP filled in
-- [ ] Serial Monitor shows `WiFi connected!`
+- [ ] Code flashed — Serial Monitor shows `WiFi connected!`
 - [ ] `mom_detector.py` saved somewhere permanent
 - [ ] Flask installed (`pip install flask`)
-- [ ] Auto-start task registered via PowerShell
+- [ ] Python server auto-start task registered via PowerShell
 - [ ] `netstat` confirms port 5555 is listening
 - [ ] Open door → random site opens on PC ✅
 
 ---
 
+## 🔋 Battery Life Expectations
+
+With **deep sleep** enabled (this version):
+
+- **Active time:** ~2 seconds per door open (WiFi + HTTP request)
+- **Sleep time:** 99.8% of the time (~10 µA draw)
+- **Expected life:** **6-12 months on 2×2xAA packs (6V)**
+
+Without deep sleep (original version):
+
+- Constant WiFi = 80+ mA draw
+- Expected life: 1-2 weeks
+
+---
+
 ## 🔧 Troubleshooting
 
-| Problem | Fix |
-|---------|-----|
-| Upload stuck at `Connecting....` | Hold **BOOT** button on ESP32 while uploading |
-| No COM port in Arduino IDE | Install **CP2102** or **CH340** USB drivers (Google your board's chip) |
-| ESP32 won't connect to Wi-Fi | Make sure it's **2.4 GHz** — ESP32 doesn't support 5 GHz |
-| Door triggers when closed, not open | Swap `HIGH`/`LOW` in the `if` condition in the sketch |
-| PC not reachable from ESP32 | Re-run `ipconfig` — your IP may have changed. Set a static IP in Windows network settings to fix permanently |
-| Port 5555 not showing in netstat | `pythonw` might not be in PATH — try full path: `C:\Python3x\pythonw.exe` |
-| Flask not found | Run `pip install flask` again, or try `pip3 install flask` |
+| Problem                          | Fix                                                                                                             |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Upload stuck at `Connecting....` | Hold **BOOT** button on ESP32 while uploading                                                                   |
+| No COM port in Arduino IDE       | Install **CP2102** or **CH340** USB drivers (Google your board's chip)                                          |
+| ESP32 won't connect to Wi-Fi     | Make sure it's **2.4 GHz** — ESP32 doesn't support 5 GHz                                                        |
+| Can't find `credentials.h` error | Make sure the file is in the same folder as `.ino` file, not in a subfolder                                     |
+| PC not reachable from ESP32      | Run `ipconfig` again — your IP may have changed. Set a static IP in Windows network settings to fix permanently |
+| Port 5555 not showing in netstat | Make sure `mom_detector.py` is actually running. Check Task Scheduler.                                          |
+| Flask not found                  | Run `pip install flask` again, or try `pip3 install flask`                                                      |
+| False triggers waking ESP32      | Reed switch might be too close to magnet — increase distance slightly                                           |
+
+---
+
+## 📝 Notes
+
+- **NO vs NC:** This uses a **Normally Open (NO)** reed switch. Door closed = magnet holds it closed. Door open = magnet pulls away, switch opens, triggers GPIO interrupt.
+- **2×2xAA in series:** Connect pack 1's + to pack 2's −. You now have 6V between pack 1's − and pack 2's +.
+- **Customizing sites:** Edit the `SITES` list in `mom_detector.py` to add/remove random sites.
+- **Changing port:** If you use a different port, update `PC_PORT` in `credentials.h` AND the `app.run(port=5555)` line in `mom_detector.py`.

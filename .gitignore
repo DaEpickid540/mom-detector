@@ -1,0 +1,20 @@
+# Credentials and sensitive info
+credentials.h
+config.h
+*.key
+*.pem
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Build artifacts
+build/
+*.o
+*.elf
+*.bin
+
+# OS
+.DS_Store
+Thumbs.db
