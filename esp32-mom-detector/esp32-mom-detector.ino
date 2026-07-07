@@ -1,10 +1,10 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
-#include "credentials.h"
 
-const char* ssid     = SSID;
-const char* password = PASSWORD;
-const char* pcIP     = PC_IP;
+
+const char* ssid     = "SSID";
+const char* password = "PASSWORD";
+const char* pcIP     = "PC_IP";
 const int   pcPort   = PC_PORT;
 
 const int DOOR_PIN = 14;
@@ -76,7 +76,7 @@ void goToSleep() {
   
   // Go to deep sleep
   // RTC memory (bootCount) persists across sleep
-  esp_deep_sleep_start();
+  esp_deep_asleep_start();
 }
 
 void loop() {
